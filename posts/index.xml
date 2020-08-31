@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Posts on Vedaa&#39;s Blogs</title>
+    <link>/posts/</link>
+    <description>Recent content in Posts on Vedaa&#39;s Blogs</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    
+        <atom:link href="/posts/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>My GSoC &#39;20 Experience at VideoLAN</title>
+      <link>/posts/gsoc-2020/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/posts/gsoc-2020/</guid>
+      <description>&lt;p&gt;This blog describes my experience and work on audio upmixing filters in VLC in the 2020 chapter of Google Summer of Code, under the mentorship of Alexandre Janniaux (unidan), Thomas Guillem (tguillem) and Jean-Baptiste Kempf(j-b).&lt;/p&gt;</description>
+      
+    </item>
+    
+  </channel>
+</rss>

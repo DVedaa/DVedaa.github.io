@@ -1,1 +1,1 @@
-# DVedaa.github.io
+# Repository for the blog

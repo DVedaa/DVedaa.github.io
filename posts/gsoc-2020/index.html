@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.74.3" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>My GSoC &#39;20 Experience at VideoLAN&nbsp;&ndash;&nbsp;Vedaa&#39;s Blogs</title><link rel="stylesheet" href="/css/core.min.b6e7c6dafbf678ac55911faffcdafe89ecdf52a9ee7cde53d4b4cdcbf6e1035c2d80972bfafe9cc6b4615675799e9043.css" integrity="sha384-tufG2vv2eKxVkR&#43;v/Nr&#43;iezfUqnufN5T1LTNy/bhA1wtgJcr&#43;v6cxrRhVnV5npBD"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="My GSoC &#39;20 Experience at VideoLAN" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">Vedaa's Blogs</span></a></span>
+        <span class="header right-side"></span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">My GSoC '20 Experience at VideoLAN</h1></section><article class="article markdown-body"><p>This blog describes my experience and work on audio upmixing filters in VLC in the 2020 chapter of Google Summer of Code, under the mentorship of Alexandre Janniaux (unidan), Thomas Guillem (tguillem) and Jean-Baptiste Kempf(j-b).</p>
+<hr>
+<h2 id="a-little-background-on-how-modules-in-vlc-work">A Little Background on How Modules in VLC work</h2>
+<p>VLC  has a core and a lot of modules. These modules are almost all independent from each other and provide most of the functionalities in VLC. When a filter is selected, the associated module is loaded. These modules generally have four parts :</p>
+<ol>
+<li>
+<p><strong>Module description</strong> : This section defines the name of the module, a small description of what the module does does, any parameters the module requires, the capability of the module, and the callbacks of the module.</p>
+<ul>
+<li>The name of the module is the term that is displayed in the GUI.</li>
+<li>The description appears on hovering over the module in GUI.</li>
+<li>Parameters of the module are the values passed to the module and which help it in performing its function. They usually have default values. For example, a video sharpening filter requires sharpening strength.</li>
+<li>Capability defines the type and priority of the module. When a certain subcategory of modules is called, all the associated modules are called and arranged in descending order of priority, until the desired module is found. For example, a user-selected audio filter has the capability of <code>(&quot;audio filter&quot;, 0)</code>.</li>
+<li>The callbacks of the module are the functions of the module that are called when the function is loaded into and flushed from memory. The callback includes the Open() function and sometimes the Destroy() function.</li>
+</ul>
+</li>
+<li>
+<p><strong>Open()</strong>   : This function is called when a module is loaded into memory. It contains checks to validate the input to the module, initialises the internal structures of the module and calls the DoWork() function, iterating over the audio input in block_t format.</p>
+</li>
+<li>
+<p><strong>DoWork()</strong> : This function receives the input audio samples in a block_t format. Block_t is an internal core VLC structure which contains a certain amount of audio samples. DoWork performs operations on this block_t structure and returns the block_t to the Open() function. Along with the samples, the DoWork function also receives the internal data structures, if any, from the Open() function.</p>
+</li>
+<li>
+<p><strong>Destroy()</strong> : This is an optional callback defined in the module description. It frees the memory space occupied by the internal data structures of the module.</p>
+</li>
+</ol>
+<hr>
+<h2 id="what-is-upmixing">What is upmixing</h2>
+<p>Upmixing is a process that takes an audio input with a certain number of channels and converts it into an audio output with a greater number of channels. In this case, I upmixed stereo audio i.e. audio with 2 channels (L R) into 4 or more channels ( L R C S ). There were two major aspects to my GSoC project :</p>
+<ol>
+<li>Generic upmixing.</li>
+<li>Matrix-based upmixing.</li>
+</ol>
+<hr>
+<h3 id="generic-upmixing">Generic Upmixing</h3>
+<p>Generic upmixing uses mathematical and statistical tools to generate center and surround channels from the left and right channels. I worked on two such algorithms:</p>
+<h4 id="passive-surround-decoding">Passive Surround Decoding</h4>
+<p>Passive Surround Decoding is the simplest among the upmixing methods. It is a passive method that derives the center channel and the surround from the sum and difference of the left and right channels.</p>
+<p><div class="highlight"><pre class="chroma"><code class="language-C" data-lang="C"><span class="n">Center</span> <span class="p">[</span><span class="n">i</span><span class="p">]</span>      <span class="o">=</span> <span class="p">(</span> <span class="n">X_left</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="n">X_right</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span> <span class="p">;</span>
+<span class="n">Surround</span> <span class="p">[</span><span class="n">i</span><span class="p">]</span>    <span class="o">=</span> <span class="p">(</span> <span class="n">X_left</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">X_right</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="p">)</span> <span class="o">*</span> <span class="mf">0.5</span> <span class="p">;</span></code></pre></div>
+As a part of my qualification task, I had worked to port the center filter from MPlayer, which uses passive surround decoding to generate the center filter. It was merged into the VLC development branch. After GSoC started, I worked to implement the surround channel of the filter.</p>
+<h4 id="principal-component-analysis-wip">Principal Component Analysis (WiP)</h4>
+<p>Principal Component Analysis is a statistical tool that is used for dimensionality reduction. If a number of points are given in a two-dimensional space, using principal component analysis, we can find two orthonormal vectors that best fits these data points, i.e the average distance between the vectors and these points are minimum. These vectors are the two Eigen vectors that are obtained from the covariance matrix of these points and are inequal. In audio upmixing, the larger vector signifies the correlated parts ie the center channel, while the smaller channel signifies the uncorrelated parts ie the surround channel.</p>
+<p><span class="image-container"><span class="link" ><a href="https://upload.wikimedia.org/wikipedia/commons/f/f5/GaussianScatterPCA.svg" 
+target="_blank"><img class="img" src="https://upload.wikimedia.org/wikipedia/commons/f/f5/GaussianScatterPCA.svg" width="400" height="400"/></a></span>
+</span></p>
+<p>In the filter, I first calculated the total and products of the two channels. I used this data to find the covariance matrices and the two Eigen vectors. These were later multiplied with the left and right channels to obtain the center and the surround channels. To smooth over the difference in weights from one frame to another, a fading procedure was used. The block was divided into 64 equal parts, and the coefficients of the previous block were used proportionately to make it as smooth as possible.</p>
+<p>The issue with this filter was that the fading procedure did not fix these artifacts. The volumes kept fluctuating and would become extremely loud in certain areas and almost silent in other areas. I am testing out normalization and other methods to try and fix this issue.</p>
+<hr>
+<h3 id="matrix-based-upmixing">Matrix-based Upmixing</h3>
+<p>Matrix-based upmixing uses decoding matrices to extract multichannel audio from stereo audio. Unlike generic upmixing, it extracts these channels from encoded audio ie multichannel audio that was encoded into stereo channels for transmission. Even though information is lost due to encoding, the decoder makes an acceptable approximation of the center and surround channels when decoded.</p>
+<p>Under GSoC, I worked on two matrix-based upmixers :</p>
+<ol>
+<li>Dolby Prologic</li>
+<li>Dolby Prologic II</li>
+</ol>
+<hr>
+<h4 id="dolby-prologic">Dolby Prologic</h4>
+<p>Dolby Prologic is used to decode audio encoded with Dolby Surround. It is a 4:2:4 matrix, producing 4 channels from stereo audio which was encoded from 4 channels. It uses the following decoding matrix :</p>
+
+
+
+
+
+<table class="table table-bordered">
+<thead>
+<tr>
+<th></th>
+<th>L</th>
+<th>R</th>
+<th>C</th>
+<th>S</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lt</td>
+<td>0.412956</td>
+<td>0.073144</td>
+<td>0.707107</td>
+<td>0.707107</td>
+</tr>
+<tr>
+<td>Rt</td>
+<td>0.073144</td>
+<td>0.412956</td>
+<td>0.707107</td>
+<td>-0.707107</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This algorithm was already implemented in VLC&rsquo;s dev branch in <code>modules/audio_filters/channel_mixer/dolby.c</code> . I changed the calculations of the center and the surround channels slightly, reducing the volume of the center and surround channels by 3 dB and the left and right channels by 6 dB.
+I used Handbrake to encode the sample audio and test the Pro Logic decoding using this audio.</p>
+<hr>
+<h4 id="dolby-prologic-ii">Dolby Prologic II</h4>
+<p>Dolby Prologic II is the successor of Dolby Prologic. It is a 5:2:5 matrix, producing 5 channels from stereo audio which was encoded from 4 channels. In short, compared to Dolby Prologic which had one rear channels, Dolby Prologic II has 2 rear channels. The decoding matrix of Dolby Prologic II is :</p>
+
+
+
+
+
+<table class="table table-bordered">
+<thead>
+<tr>
+<th></th>
+<th>L</th>
+<th>R</th>
+<th>C</th>
+<th>LS</th>
+<th>RS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lt</td>
+<td>0.412956</td>
+<td>0.073144</td>
+<td>0.343724</td>
+<td>-0.294947</td>
+<td>-0.178698</td>
+</tr>
+<tr>
+<td>Rt</td>
+<td>0.073144</td>
+<td>0.412956</td>
+<td>0.343724</td>
+<td>0.242277</td>
+<td>0.205033</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This matrix is the inverse of the encoding matrix. It was implemented in the same file as Dolby Prologic, as it uses similar filter checks. A parameter was provided to the user through which they could select either of these filters.</p>
+<hr>
+<h2 id="other-related-operations">Other related operations</h2>
+<h3 id="surround-channel-delay">Surround channel delay</h3>
+<p>Precedence effect is an acoustic phenomenon in which output from two audio samples are perceived as one if they are delayed by 50 ms or less. Due to this effect, the listener is able to perceive the space and direction of the sound.</p>
+<p><img  src="https://jac.michaeldrolet.net/acoustics/ac_precedence_02.JPG#center"
+        alt="Haas Effect"/></p>
+<p>This was implemented for the Dolby matrices by delaying the surround to provide the precedence effect. The user can choose a delay of upto 100 ms. The sampling rate of the audio is used to find the number of samples to delay. For example, for a sampling rate of 48 kHz, the number of delayed samples can be from a minimum of 48 samples to 4800 samples.</p>
+<p>Initially, I had written a version which performed swapping with a delay line, initialised to zero. However, this was a very expensive operation, as all samples went through the delay line, significantly increasing the CPU usage.
+Next, I modified the delay line to store the data only when it was in excess. However, this led to a lot of memory problems as well as issues with delays bigger than one block_t (VLC&rsquo;s internal stream payload structure).
+Finally, I settled on storing the block_t in a queue until they were completely processed and sent to output. Initially, this created a lot of memory issues, segmentation faults and erroneous audio. After a lot of troubleshooting, I was able to get it to work.</p>
+<p>Implementation of this procedure took quite a time. I repeatedly ran into weird cases, even when I had accounted for all use-cases. Eventually, I was able to overcome it, thanks to the help and the encouragement of my mentors.</p>
+<hr>
+<h3 id="hilbert-transform-wip">Hilbert transform (WiP)</h3>
+<p>The rear channels are shifted by 90 degrees when they are encoded to DPLii. Hence, the rear channels generated by the decoding matrix should be shifted back by 90 degrees to obtain the original data. This is achieved by performing the Hilbert transform. This was done in accordance with the MATLAB documentation, using ffmpeg’s avfft.h.</p>
+<p>First, we perform Fast Fourier transform on the audio. Next, we double the first half of the output and set the second half to zero. This data is then passed through an Inverse Fast Fourier Transform. The resulting data is used as the rear channels.</p>
+<p>The main issue with this algorithm is that there is noise in the output. I have performed various tests on it and the noise continues to persist.</p>
+<hr>
+<h2 id="experience">Experience</h2>
+<p>This summer helped me hone my skills as a C developer and take them to the next level. I learnt how to read and understand huge codebases, like VLC, MPlayer (for the qualification task) and ffmpeg (for the Hilbert transform). I learnt a lot about memory management in C. I also learnt a lot about Makefiles, automake and the automake configurations, while working to integrate ffmpeg’s avfft and adding checks. Working so closely with a media application like VLC has also vastly increased my understanding of digital audio and the principles of audio filters. I have also gained insights into a lot of theoretical and mathematical topics, such as Fourier transforms, covariance and normalization.</p>
+<p>Working with Alexandre, Thomas and Jean has been a great experience. They have provided resources, motivation and help whenever required. They are very understanding and patient. From the beginning, the onus was on what I had learned, which was a very refreshing experience.</p>
+<p>This has been one of my most enjoyable and fruitful summers. I shall continue to work and finish my projects and collaborate closely with VideoLAN’s VLC. I have recommended and will recommend Google Summer of Code, especially VideoLAN, to my peers.</p></article></div>
+<div class="article bottom"></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">Vedaa's Blogs</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank">Notepadium</a></p></div></section></body>
+
+</html>
